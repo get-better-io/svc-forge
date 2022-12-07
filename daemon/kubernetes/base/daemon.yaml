@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daemon
+  namespace: cnc-forge
+  labels:
+    app: daemon
+spec:
+  replicas: 1
+  strategy:
+  selector:
+    matchLabels:
+      app: daemon
+  template:
+    metadata:
+      labels:
+        app: daemon
+    spec:
+      containers:
+      - name: daemon
+        image: docker.io/gaf3/cnc-forge-daemon:0.7.0
+        imagePullPolicy: Always
+        env:
+        - name: SLEEP
+          value: "5"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        volumeMounts:
+        - name: forge
+          mountPath: "/opt/service/forge"
+          readOnly: true
+        - name: secret
+          mountPath: "/opt/service/secret"
+          readOnly: true
+      volumes:
+      - name: forge
+        configMap:
+          name: forge
+      - name: secret
+        secret:
+          secretName: secret
+          defaultMode: 0600
