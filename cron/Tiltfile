@@ -1,0 +1,5 @@
+
+# {{ cron }}
+
+docker_build('{{ service }}-{{ cron }}', './{{ cron }}')
+k8s_resource('{{ cron }}', port_forwards=['{{ cron_debug_port }}:5678'], resource_deps=['secret'])

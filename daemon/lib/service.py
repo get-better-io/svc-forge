@@ -1,56 +1,73 @@
 """
-Main module for daemon
+Module for the Daemon
 """
 
+# pylint: disable=no-self-use
+
 import os
-import json
-import time
-import traceback
-
+import micro_logger
+{% if 'redis' in microservices %}import json
 import redis
+{% else %}import time
 
-import cnc
-import github
+import {{ code }}
+{% endif %}
+import relations_rest
 
-class Daemon:
+import prometheus_client
+
+PROCESS = prometheus_client.Gauge("process_seconds", "Time to complete a processing task")
+PERSONS = prometheus_client.Summary("persons_processed", "Persons processed")
+
+class Daemon: # pylint: disable=too-few-public-methods
     """
-    Main class for daemon
+    Daemon class
     """
 
     def __init__(self):
 
-        self.sleep = int(os.environ['SLEEP'])
+        self.name = os.environ["K8S_POD"]
 
-        self.redis = redis.Redis(host="redis.cnc-forge", charset="utf-8", decode_responses=True)
+        self.sleep = int(os.environ.get("SLEEP", 5))
 
-        github.GitHub.config()
+        self.logger = micro_logger.getLogger("{{ service }}-{{ daemon }}")
 
+        self.source = relations_rest.Source("{{ service }}", url="http://{{ api }}.{{ service }}"){% if 'redis' in microservices %}
+
+        self.redis = redis.Redis(host='{{ redis }}.{{ service }}', encoding="utf-8", decode_responses=True)
+
+        if (
+            not self.redis.exists("{{ service }}/person") or
+            "daemon" not in [group["name"] for group in self.redis.xinfo_groups("{{ service }}/person")]
+        ):
+            self.redis.xgroup_create("{{ service }}/person", "daemon", mkstream=True){% endif %}
+
+    @PROCESS.time()
     def process(self):
         """
-        Processes all the routines for reminding
+        Reads people off the queue and logs them
         """
+{% if 'redis' in microservices %}
+        message = self.redis.xreadgroup("daemon", self.name, {"{{ service }}/person": ">"}, count=1, block=1000*self.sleep)
 
-        for key in self.redis.keys("/cnc/*"):
+        if not message or "person" not in message[0][1][0][1]:
+            return
 
-            data = json.loads(self.redis.get(key))
-
-            if data["status"] not in ["Created", "Retry"]:
-                continue
-
-            try:
-                cnc.CnC(data).process()
-            except Exception as exception:
-                data["status"] = "Error"
-                data["error"] = str(exception)
-                data["traceback"] = traceback.format_exc()
-
-            self.redis.set(key, json.dumps(data), ex=24*60*60)
+        person = json.loads(message[0][1][0][1]["person"])
+        self.logger.info("person", extra={"person": person})
+        PERSONS.observe(1)
+        self.redis.xack("{{ service }}/person", "daemon", message[0][1][0][0]){% else %}
+        for person in {{ code }}.Person.many():
+            self.logger.info("person", extra={"person": person.export()})
+            PERSONS.observe(1){% endif %}
 
     def run(self):
         """
-        Runs the daemon
+        Main loop with sleep
         """
 
+        prometheus_client.start_http_server(80)
+
         while True:
-            self.process()
-            time.sleep(self.sleep)
+            self.process(){% if 'redis' not in microservices %}
+            time.sleep(self.sleep){% endif %}

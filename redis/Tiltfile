@@ -1,0 +1,4 @@
+
+# {{ redis }}
+
+k8s_resource('{{ redis }}', port_forwards=['{{ redis_port }}:6379'])

@@ -1,0 +1,26 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ cron }}
+  namespace: {{ service }}
+  labels:
+    app: {{ cron }}
+spec:
+  schedule: "0 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: {{ cron }}
+        spec:
+          containers:
+          - name: cron
+            image: {{ service }}-{{ cron }}
+            imagePullPolicy: Always
+            env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: LOG_LEVEL
+              value: WARNING
+          restartPolicy: OnFailure

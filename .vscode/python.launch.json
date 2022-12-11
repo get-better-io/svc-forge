@@ -1,0 +1,13 @@
+{
+    "name": "{{ microservice }}",
+    "type": "python",
+    "request": "attach",
+    "port": {{ debug_port }},
+    "host": "localhost",
+    "pathMappings": [
+        {
+            "localRoot": "${workspaceFolder}/{{ microservice }}",
+            "remoteRoot": "/opt/service"
+        }
+    ]
+}

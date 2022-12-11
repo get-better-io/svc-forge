@@ -1,0 +1,5 @@
+
+# {{ api }}
+
+docker_build('{{ service }}-{{ api }}', './{{ api }}')
+k8s_resource('{{ api }}', port_forwards=['{{ api_port }}:80', '{{ api_debug_port }}:5678'], resource_deps=['secret'])

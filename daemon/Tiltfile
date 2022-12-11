@@ -1,0 +1,5 @@
+
+# {{ daemon }}
+
+docker_build('{{ service }}-{{ daemon }}', './{{ daemon }}')
+k8s_resource('{{ daemon }}', port_forwards=['{{ daemon_debug_port }}:5678'], resource_deps=['{{ api }}'])

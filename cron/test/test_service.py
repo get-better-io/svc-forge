@@ -1,105 +1,67 @@
 import unittest
 import unittest.mock
+import micro_logger_unittest
+import relations.unittest
 
-import os
 import json
-import fnmatch
 
 import service
+import {{ code }}
 
-class MockRedis:
+{% if 'redis' in microservices %}class MockRedis:
+
+    host = None
+    queue = None
 
     def __init__(self, host, **kwargs):
 
         self.host = host
+        self.queue = {}
 
-        self.data = {}
-        self.expires = {}
-        self.messages = []
+    def xadd(self, stream, fields):
 
-        for key in kwargs:
-            setattr(self, key, kwargs[key])
+        self.queue.setdefault(stream, [])
+        self.queue[stream].append({"fields": fields}){% endif %}
 
-    def __str__(self):
+class TestCron(micro_logger_unittest.TestCase):
 
-        return f"MockRedis<host={self.host},port={self.port}>"
+    maxDiff = None
 
-    def get(self, key):
+    @unittest.mock.patch("micro_logger.getLogger", micro_logger_unittest.MockLogger)
+    @unittest.mock.patch('relations_restx.Source', relations.unittest.MockSource)
+{% if 'redis' in microservices %}    @unittest.mock.patch('redis.Redis', MockRedis)
+{% endif %}    def setUp(self):
 
-        return self.data.get(key)
+        self.cron = service.Cron()
 
-    def set(self, key, value, ex=None):
+    @unittest.mock.patch.dict('os.environ', {"LOG_LEVEL": "INFO"})
+    @unittest.mock.patch("micro_logger.getLogger", micro_logger_unittest.MockLogger)
+    @unittest.mock.patch('relations_restx.Source', relations.unittest.MockSource)
+{% if 'redis' in microservices %}    @unittest.mock.patch('redis.Redis', MockRedis)
+{% endif %}    def test___init__(self):
 
-        self.data[key] = value
-        self.expires[key] = ex
+        cron = service.Cron()
 
-    def keys(self, pattern):
+        self.assertEqual(cron.logger.name, "{{ service }}-{{ cron }}")
 
-        for key in sorted(self.data.keys()):
-            if fnmatch.fnmatch(key, pattern):
-                yield key
+        self.assertIsInstance(relations.source("{{ service }}"), relations.unittest.MockSource)
+{% if 'redis' in microservices %}
+        self.assertEqual(cron.redis.host, "{{ redis }}.{{ service }}"){% endif %}
 
-class TestService(unittest.TestCase):
+    def test_process(self):
 
-    @unittest.mock.patch.dict(os.environ, {
-        "SLEEP": "7"
-    })
-    @unittest.mock.patch("redis.Redis", MockRedis)
-    @unittest.mock.patch("github.GitHub.config", unittest.mock.MagicMock)
-    def setUp(self):
+        person = {{ code }}.Person("Tom").create()
 
-        self.daemon = service.Daemon()
+        self.cron.process()
 
-    @unittest.mock.patch.dict(os.environ, {
-        "SLEEP": "7"
-    })
+        self.assertLogged(self.cron.logger, "info", "person", extra={"person": person.export()})
+{% if 'redis' in microservices %}
+        self.assertEqual(len(self.cron.redis.queue['{{ service }}/person']), 1)
+        self.assertEqual(json.loads(self.cron.redis.queue['{{ service }}/person'][0]["fields"]["person"]), person.export()){% endif %}
 
-    @unittest.mock.patch("redis.Redis", MockRedis)
-    @unittest.mock.patch("github.GitHub.config")
-    def test___init___(self, mock_github):
+    @unittest.mock.patch('prometheus_client.push_to_gateway')
+    def test_run(self, mock_push):
 
-        daemon = service.Daemon()
+        self.cron.run()
 
-        self.assertEqual(daemon.sleep, 7)
-
-        self.assertEqual(daemon.redis.host, "redis.cnc-forge")
-
-        mock_github.assert_called_once_with()
-
-    @unittest.mock.patch("cnc.CnC.process")
-    @unittest.mock.patch("traceback.format_exc")
-    def test_process(self, mock_traceback, mock_process):
-
-        self.daemon.redis.set("/cnc/music", json.dumps({"status": "Created"}))
-        self.daemon.redis.set("/cnc/factory", json.dumps({"status": "Retry"}))
-        self.daemon.redis.set("/cnc/sing", json.dumps({"status": "Nope"}))
-
-        mock_process.side_effect= Exception("whoops")
-        mock_traceback.return_value = "adaisy"
-
-        self.daemon.process()
-
-        self.assertEqual(json.loads(self.daemon.redis.get("/cnc/music")), {
-            "status": "Error",
-            "error": "whoops",
-            "traceback": "adaisy"
-        })
-
-        self.assertEqual(json.loads(self.daemon.redis.get("/cnc/factory")), {
-            "status": "Error",
-            "error": "whoops",
-            "traceback": "adaisy"
-        })
-
-        self.assertEqual(json.loads(self.daemon.redis.get("/cnc/sing")), {
-            "status": "Nope"
-        })
-
-    @unittest.mock.patch("service.time.sleep")
-    def test_run(self, mock_sleep):
-
-        mock_sleep.side_effect = [Exception("whoops")]
-
-        self.assertRaisesRegex(Exception, "whoops", self.daemon.run)
-
-        mock_sleep.assert_called_with(7)
+        mock_push.assert_called_once_with("push.prometheus:9091", "{{ service }}/cron", registry=service.REGISTRY)

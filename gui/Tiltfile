@@ -1,0 +1,5 @@
+
+# {{ gui }}
+
+docker_build('{{ service }}-{{ gui }}', './{{ gui }}')
+k8s_resource('{{ gui }}', port_forwards=['{{ gui_port }}:80'], resource_deps=['api'])

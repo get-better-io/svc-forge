@@ -1,0 +1,8 @@
+
+{
+    "name": "{{ gui }}",
+    "type": "chrome",
+    "request": "launch",
+    "url": "http://localhost:{{ gui_port }}/",
+    "webRoot": "${workspaceFolder}/{{ gui }}/www"
+}

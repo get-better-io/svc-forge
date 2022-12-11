@@ -2,4 +2,4 @@
 
 import service
 
-service.Daemon().run()
+service.Cron().run()

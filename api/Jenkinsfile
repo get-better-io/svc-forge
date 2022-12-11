@@ -1,0 +1,32 @@
+                stage('{{ api }}') {
+                    stages {
+                        stage('image') {
+                            steps {
+                                dir('{{ api }}') {
+                                    sh 'make image -e VERSION=${VERSION}'
+                                }
+                            }
+                        }
+                        stage('ddl') {
+                            steps {
+                                dir('{{ api }}') {
+                                    sh 'make ddl -e VERSION=${VERSION}'
+                                }
+                            }
+                        }
+                        stage('test') {
+                            steps {
+                                dir('{{ api }}') {
+                                    sh 'make test -e VERSION=${VERSION}'
+                                }
+                            }
+                        }
+                        stage('lint') {
+                            steps {
+                                dir('{{ api }}') {
+                                    sh 'make lint -e VERSION=${VERSION}'
+                                }
+                            }
+                        }
+                    }
+                }

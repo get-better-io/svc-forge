@@ -1,56 +1,53 @@
 """
-Main module for daemon
+Module for the Subnet Queue
 """
 
-import os
-import json
-import time
-import traceback
+# pylint: disable=no-self-use
 
+import micro_logger
+{% if 'redis' in microservices %}import json
 import redis
+{% endif %}
+import relations_rest
 
-import cnc
-import github
+import {{ code }}
 
-class Daemon:
+import prometheus_client
+
+REGISTRY = prometheus_client.CollectorRegistry()
+
+PROCESS = prometheus_client.Gauge("process_seconds", "Time to complete a processing task", registry=REGISTRY)
+PERSONS = prometheus_client.Summary("persons_processed", "Persons processed", registry=REGISTRY)
+
+class Cron: # pylint: disable=too-few-public-methods
     """
-    Main class for daemon
+    Cron class to run the processing
     """
 
     def __init__(self):
 
-        self.sleep = int(os.environ['SLEEP'])
+        self.logger = micro_logger.getLogger("{{ service }}-{{ cron }}")
 
-        self.redis = redis.Redis(host="redis.cnc-forge", charset="utf-8", decode_responses=True)
+        self.source = relations_rest.Source("{{ service }}", url="http://{{ api }}.{{ service }}"){% if 'redis' in microservices %}
 
-        github.GitHub.config()
+        self.redis = redis.Redis(host='{{ redis }}.{{ service }}', encoding="utf-8", decode_responses=True){% endif %}
 
+    @PROCESS.time()
     def process(self):
         """
-        Processes all the routines for reminding
+        Loads subnets and pushes onto the queue
         """
 
-        for key in self.redis.keys("/cnc/*"):
-
-            data = json.loads(self.redis.get(key))
-
-            if data["status"] not in ["Created", "Retry"]:
-                continue
-
-            try:
-                cnc.CnC(data).process()
-            except Exception as exception:
-                data["status"] = "Error"
-                data["error"] = str(exception)
-                data["traceback"] = traceback.format_exc()
-
-            self.redis.set(key, json.dumps(data), ex=24*60*60)
+        for person in {{ code }}.Person.many():
+            self.logger.info("person", extra={"person": person.export()})
+            PERSONS.observe(1){% if 'redis' in microservices %}
+            self.redis.xadd("{{ service }}/person", fields={"person": json.dumps(person.export())}){% endif %}
 
     def run(self):
         """
-        Runs the daemon
+        Runs through s process
         """
 
-        while True:
-            self.process()
-            time.sleep(self.sleep)
+        self.process()
+
+        prometheus_client.push_to_gateway("push.prometheus:9091", "{{ service }}/{{ cron }}", registry=REGISTRY)

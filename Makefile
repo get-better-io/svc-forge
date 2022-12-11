@@ -1,21 +1,31 @@
-VERSION?=0.1.0
+VERSION?=$(shell cat VERSION)
 TILT_PORT={{ tilt_port }}
-.PHONY: up down tag untag
+INSTALL=python:3.8.5-alpine3.12
+VOLUMES=-v ${PWD}/api/:/opt/service/api/ \
+		-v ${PWD}/VERSION:/opt/service/VERSION \
+		-v ${PWD}/setup.py:/opt/service/setup.py
+.PHONY: up down setup tag untag
 
 up:
-	mkdir -p cnc
-	mkdir -p forge
+	kubectx docker-desktop
 	mkdir -p secret
-	echo "- op: replace\n  path: /spec/template/spec/volumes/0/hostPath/path\n  value: $(PWD)/cnc" > kubernetes/tilt/cnc.yaml
-	tilt --port $(TILT_PORT) up --context docker-desktop
+	mkdir -p config
+	# cnc-forge: up
+	tilt --port $(TILT_PORT) up
 
 down:
-	tilt down --context docker-desktop
+	kubectx docker-desktop
+	tilt down
+
+setup:
+	docker run $(TTY) $(VOLUMES) $(INSTALL) sh -c "cp -r /opt/service /opt/install && \
+	cd /opt/install/ && python setup.py install && \
+	python -m {{ code }}"
 
 tag:
-	-git tag -a "v$(VERSION)" -m "Version $(VERSION)"
+	-git tag -a $(VERSION) -m "Version $(VERSION)"
 	git push origin --tags
 
 untag:
-	-git tag -d "v$(VERSION)"
-	git push origin ":refs/tags/v$(VERSION)"
+	-git tag -d $(VERSION)
+	git push origin ":refs/tags/$(VERSION)"

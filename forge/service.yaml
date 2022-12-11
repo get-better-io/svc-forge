@@ -1,0 +1,221 @@
+description: Creates a Service
+input:
+  craft: service
+  fields:
+  - name: service
+    description: name of the service
+    validation: ^[a-z][a-z0-9\-]{1,46}$
+    required: true
+    trigger: true
+  - name: microservices
+    options:
+    - api
+    - daemon
+    - gui
+    - cron
+    - redis
+    multi: true
+    required: true
+    trigger: true
+  - name: tilt_port
+    default: "{{ port(service) - 32 }}"
+    requires: service
+  - requires: microservices
+    iterate:
+      microservice: microservices
+    values:
+      ports:
+        gui: 0
+        api: 10000
+        daemon: 20000
+        cron: 30000
+        redis: 20000
+    blocks:
+    - name: "{{ microservice }}"
+      default: "{{ microservice }}"
+      description: "What to call {{ microservice }}"
+    - name: "{{ microservice }}_port"
+      default: "{{ port(service) + ports[microservice] - 3200 }}"
+      condition: "{? microservice not in ['daemon', 'cron'] ?}"
+    - name: "{{ microservice }}_debug_port"
+      default: "{{ port(service) + ports[microservice] - 3232 }}"
+      condition: "{? microservice not in ['gui', 'redis'] ?}"
+
+output:
+
+  code:
+  - github:
+      repo: "get-better-io/{{ service }}"
+      prefix: "{{ ticket }}"
+      branch: main
+
+    change:
+
+    # Main service directory
+
+    - github:
+        repo: get-better-io/svc-forge
+
+      content:
+      - source: VERSION
+      - source: ACCOUNT
+      - source: Makefile
+      - source: .gitignore
+      - source: .vscode/launch.json
+      - source: Tiltfile
+      - source: README.md
+      - source: setup.py
+      - source: kubernetes
+        exclude: kubernetes/tilt/resource.kustomization.yaml
+
+    # api
+
+    - condition: "{{'api' in microservices}}"
+      content:
+      - source: api
+        destination: "{{ api }}"
+        exclude:
+        - "*/*.Makefile"
+        - "*/Tiltfile"
+        - "*/lib/code.py"
+        - "*/README.md"
+      - source: .vscode/python.launch.json
+        destination: .vscode/launch.json
+        transpose:
+          microservice: api
+          debug_port: api_debug_port
+        json: configurations
+      - source: kubernetes/tilt/resource.kustomization.yaml
+        destination: kubernetes/tilt/kustomization.yaml
+        yaml: resources
+        transpose:
+          microservice: api
+      - source: api/ddl.Makefile
+        destination: Makefile
+        text: up
+      - source: api/Tiltfile
+        destination: Tiltfile
+        text: true
+      - source: api/lib/code.py
+        destination: "{{ api }}/lib/{{ code }}.py"
+      - source: api/README.md
+        destination: README.md
+        text: true
+
+    # gui
+
+    - condition: "{{'gui' in microservices}}"
+      content:
+      - source: gui
+        destination: "{{ gui }}"
+        exclude:
+        - "*/*.Makefile"
+        - "*/Tiltfile"
+        - "*/README.md"
+        preserve:
+        - "*.html"
+        - "*.js"
+        - "gui/www/fonts/*"
+        transform:
+        - "*/index.html"
+        - "*/header.html"
+        - "*/home.html"
+      - source: .vscode/gui.launch.json
+        destination: .vscode/launch.json
+        json: configurations
+      - source: kubernetes/tilt/resource.kustomization.yaml
+        destination: kubernetes/tilt/kustomization.yaml
+        yaml: resources
+        transpose:
+          microservice: gui
+      - source: gui/Tiltfile
+        destination: Tiltfile
+        text: true
+      - source: gui/README.md
+        destination: README.md
+        text: true
+
+    # daemon
+
+    - condition: "{{'daemon' in microservices}}"
+      content:
+      - source: daemon
+        destination: "{{ daemon }}"
+        exclude:
+        - "*/*.Makefile"
+        - "*/Tiltfile"
+        - "*/README.md"
+      - source: .vscode/python.launch.json
+        destination: .vscode/launch.json
+        transpose:
+          microservice: daemon
+          debug_port: daemon_debug_port
+        json: configurations
+      - source: kubernetes/tilt/resource.kustomization.yaml
+        destination: kubernetes/tilt/kustomization.yaml
+        yaml: resources
+        transpose:
+          microservice: daemon
+      - source: dep.Makefile
+        destination: Makefile
+        text: up
+        transpose:
+          microservice: daemon
+      - source: daemon/Tiltfile
+        destination: Tiltfile
+        text: true
+      - source: daemon/README.md
+        destination: README.md
+        text: true
+
+    # cron
+
+    - condition: "{{'cron' in microservices}}"
+      content:
+      - source: cron
+        destination: "{{ cron }}"
+        exclude:
+        - "*/*.Makefile"
+        - "*/Tiltfile"
+        - "*/README.md"
+      - source: .vscode/python.launch.json
+        destination: .vscode/launch.json
+        transpose:
+          microservice: cron
+          debug_port: cron_debug_port
+        json: configurations
+      - source: kubernetes/tilt/resource.kustomization.yaml
+        destination: kubernetes/tilt/kustomization.yaml
+        yaml: resources
+        transpose:
+          microservice: cron
+      - source: dep.Makefile
+        destination: Makefile
+        text: up
+        transpose:
+          microservice: cron
+      - source: cron/Tiltfile
+        destination: Tiltfile
+        text: true
+      - source: cron/README.md
+        destination: README.md
+        text: true
+
+    # redis
+
+    - condition: "{{'redis' in microservices}}"
+      content:
+      - source: redis
+        destination: "{{ redis }}"
+        exclude:
+        - "*/*.Makefile"
+        - "*/Tiltfile"
+        - "*/README.md"
+      - source: kubernetes/tilt/resource.kustomization.yaml
+        destination: kubernetes/tilt/kustomization.yaml
+        yaml: resources
+        transpose:
+          microservice: redis
+      - source: redis/Tiltfile
+        destination: Tiltfile
+        text: true

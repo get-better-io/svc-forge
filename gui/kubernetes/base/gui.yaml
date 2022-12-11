@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gui
-  namespace: cnc-forge
+  name: {{ gui }}
+  namespace: {{ service }}
   labels:
-    app: gui
+    app: {{ gui }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: gui
+      app: {{ gui }}
   template:
     metadata:
       labels:
-        app: gui
+        app: {{ gui }}
     spec:
       containers:
-      - name: gui
-        image: docker.io/gaf3/cnc-forge-gui:0.7.0
+      - name: {{ gui }}
+        image: {{ service }}-{{ gui }}
         imagePullPolicy: Always
         ports:
         - containerPort: 80
@@ -33,17 +33,21 @@ spec:
           httpGet:
             path: /api/health
             port: 80
+      - name: exporter
+        image: nginx/nginx-prometheus-exporter:0.9.0
+        args:
+        - '-nginx.scrape-uri=http://localhost/status'
 ---
 kind: Service
 apiVersion: v1
 metadata:
-  name: www
-  namespace: cnc-forge
+  name: {{ gui }}
+  namespace: {{ service }}
   labels:
-    app: gui
+    app: {{ gui }}
 spec:
   selector:
-    app: gui
+    app: {{ gui }}
   type: ClusterIP
   ports:
   - name: http

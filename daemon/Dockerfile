@@ -1,17 +1,15 @@
-FROM python:3.8.5-alpine3.12
+FROM python:3.10.8-alpine3.16
 
-COPY .gitconfig /root/
-
-RUN mkdir -p /root/.ssh/ && \
-	touch /root/.ssh/config && \
-	mkdir -p /opt/service
+RUN mkdir -p /opt/service
 
 WORKDIR /opt/service
 
+COPY dep dep
 COPY requirements.txt .
 
-RUN apk add git openssh \
-    && pip install --no-cache-dir -r requirements.txt \
+RUN pip install --no-cache-dir \
+       dep/{{ service }}/ \
+	   -r requirements.txt \
 	&& find /usr/local -depth \
 		\( \
 			\( -type d -a \( -name test -o -name tests -o -name idle_test \) \) \
